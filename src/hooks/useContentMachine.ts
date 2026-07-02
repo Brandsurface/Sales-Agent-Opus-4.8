@@ -23,6 +23,7 @@ import { useCreativeFunnel } from './useCreativeFunnel';
 import { useBureauMode } from './useBureauMode';
 import { useCodeDepartment } from './useCodeDepartment';
 import { useFunnelArchive } from './useFunnelArchive';
+import { useProspectScan } from './useProspectScan';
 import {
   type FunnelDoc, bundleFunnelDocs,
   culturalToDoc, strategyToDoc, bigIdeaToDoc, pressureTestToDoc,
@@ -176,6 +177,8 @@ export function useContentMachine() {
     effectiveness, setEffectiveness, isGeneratingEffectiveness, handleGenerateEffectiveness, handleClearEffectiveness,
     funnelBriefKey, handleClearAllFunnel,
   } = useCreativeFunnel({ brief, setLastUsage, setErrorMsg, onClearPitch });
+
+  const prospect = useProspectScan(setErrorMsg);
 
   const bureau = useBureauMode({
     brief,
@@ -1236,5 +1239,18 @@ export function useContentMachine() {
     handleGenerateImage,
     handleAspectChange,
     handleExecuteTerminalCommand,
+    // Prospect Radar
+    prospectCompany: prospect.company,
+    setProspectCompany: prospect.setCompany,
+    prospectMarket: prospect.market,
+    setProspectMarket: prospect.setMarket,
+    prospectSellerProfile: prospect.sellerProfile,
+    setProspectSellerProfile: prospect.setSellerProfile,
+    resetProspectSellerProfile: prospect.resetSellerProfile,
+    prospectBrief: prospect.brief,
+    isResearchingProspect: prospect.isResearching,
+    prospectProgress: prospect.progress,
+    handleProspectResearch: prospect.handleResearch,
+    handleClearProspectBrief: prospect.handleClearBrief,
   };
 }

@@ -19,6 +19,7 @@ import { FunnelPanels } from './components/FunnelPanels';
 import { FocusModal } from './components/FocusModal';
 import { BureauFloor } from './components/BureauFloor';
 import { PitchPanel } from './components/PitchPanel';
+import { ProspectRadarPanel } from './components/ProspectRadarPanel';
 import { CodeDepartmentPanel } from './components/CodeDepartmentPanel';
 import { BlankState } from './components/BlankState';
 import { OutputWorkspace } from './components/OutputWorkspace';
@@ -116,6 +117,11 @@ export default function App() {
     expandedDoc, onExpandFunnel, onCloseFunnelDoc,
     funnelSummaryFor, isGeneratingFunnelSummary, onGenerateFunnelSummary, onArchiveFunnelDoc,
     funnelDocCount, onArchiveAllFunnel,
+    prospectCompany, setProspectCompany,
+    prospectMarket, setProspectMarket,
+    prospectSellerProfile, setProspectSellerProfile, resetProspectSellerProfile,
+    prospectBrief, isResearchingProspect, prospectProgress,
+    handleProspectResearch, handleClearProspectBrief,
   } = useContentMachine();
 
   return (
@@ -131,9 +137,11 @@ export default function App() {
             isGeneratingCampaign || isSharpening || isGeneratingMatrix ||
             isGeneratingEffectiveness || isGeneratingLogo || isOptimizingLogoPrompt ||
             isOptimizingImagePrompt || isGeneratingPitch ||
-            videoResult.loading || speechResult.loading || avatarResult.loading
+            videoResult.loading || speechResult.loading || avatarResult.loading ||
+            isResearchingProspect
           }
           title={
+            isResearchingProspect ? 'Prospect Radar' :
             isGeneratingPitch ? 'Pitch-producent' :
             isVisualDeveloping ? 'Visuel udvikling' :
             isHumanizing ? 'Humaniserer' :
@@ -323,6 +331,22 @@ export default function App() {
               onGenerateImage={handleGenerateImage}
             />
 
+            {/* PROSPECT RADAR (uafhængigt af funnel) */}
+            <ProspectRadarPanel
+              company={prospectCompany}
+              setCompany={setProspectCompany}
+              market={prospectMarket}
+              setMarket={setProspectMarket}
+              sellerProfile={prospectSellerProfile}
+              setSellerProfile={setProspectSellerProfile}
+              resetSellerProfile={resetProspectSellerProfile}
+              brief={prospectBrief}
+              isResearching={isResearchingProspect}
+              progress={prospectProgress}
+              onResearch={handleProspectResearch}
+              onClearBrief={handleClearProspectBrief}
+            />
+
             {/* PITCH-AFDELING */}
             <PitchPanel
               pitchResult={pitchResult}
@@ -461,7 +485,7 @@ export default function App() {
               <span>
                 Neura Studio by{' '}
                 <a href="https://www.larssohl.dk" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 transition-colors">larssohl.dk</a>
-                {' '}&amp; Claude Anthropic &copy; 2026 &middot; v1.25.1
+                {' '}&amp; Claude Anthropic &copy; 2026 &middot; v1.26.0
               </span>
               <div className="flex items-center space-x-4">
                 {lastUsage && <UsageBadge usage={lastUsage} />}
