@@ -5,6 +5,7 @@
 
 import type { ProspectBrief } from '../types';
 import { downloadTextFile, slugify } from './exportMarkdown';
+import { marketLabel } from './market';
 
 export function prospectBriefToMarkdown(brief: ProspectBrief): string {
   const c = brief.company;
@@ -13,6 +14,7 @@ export function prospectBriefToMarkdown(brief: ProspectBrief): string {
   lines.push(`# Prospect Radar — ${c.name}`);
   lines.push('');
   lines.push(`*Researchet ${new Date(brief.researchedAt).toLocaleString('da-DK')} · Konfidens: ${brief.confidence.level}*`);
+  lines.push(`*Marked: ${marketLabel(brief.market)}*`);
   lines.push('');
   lines.push(`## Grund til at ringe`);
   lines.push(brief.reasonToCall);

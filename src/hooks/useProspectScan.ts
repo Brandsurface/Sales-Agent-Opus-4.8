@@ -4,9 +4,10 @@
  */
 
 import { useState } from 'react';
-import { ProspectBrief, SellerProfile } from '../types';
+import { ProspectBrief, ProspectMarket, SellerProfile } from '../types';
 import { httpErrorMessage } from './httpError';
 import { loadSellerProfile, saveSellerProfile, EXEMPLAR_DEFAULT_SELLER } from '../lib/sellerProfile';
+import { detectMarketFromInput } from '../lib/market';
 
 const PROGRESS_LABELS: Record<string, string> = {
   gathering: 'Graver efter fund …',
@@ -19,11 +20,18 @@ const PROGRESS_LABELS: Record<string, string> = {
  * lokalt, så den kun skal redigeres én gang.
  */
 export function useProspectScan(setErrorMsg: (m: string | null) => void) {
-  const [company, setCompany] = useState('');
+  const [company, setCompanyState] = useState('');
+  const [market, setMarket] = useState<ProspectMarket>('DK');
   const [sellerProfile, setSellerProfileState] = useState<SellerProfile>(() => loadSellerProfile());
   const [brief, setBrief] = useState<ProspectBrief | null>(null);
   const [isResearching, setIsResearching] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+
+  const setCompany = (v: string) => {
+    setCompanyState(v);
+    const detected = detectMarketFromInput(v);
+    if (detected) setMarket(detected);
+  };
 
   const setSellerProfile = (p: SellerProfile) => {
     setSellerProfileState(p);
@@ -43,7 +51,7 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
       const response = await fetch('/api/prospect-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: company.trim(), sellerProfile }),
+        body: JSON.stringify({ company: company.trim(), sellerProfile, market }),
       });
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -90,6 +98,7 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
 
   return {
     company, setCompany,
+    market, setMarket,
     sellerProfile, setSellerProfile, resetSellerProfile,
     brief, isResearching, progress,
     handleResearch, handleClearBrief,

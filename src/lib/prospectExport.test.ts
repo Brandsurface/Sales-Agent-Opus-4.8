@@ -27,5 +27,6 @@ describe('prospectBriefToMarkdown', () => {
     expect(md).toContain('Mangler & behov');
     expect(md).toContain('Ingen fysiske prøver');
     expect(md).toContain('https://acme.dk/news');
+    expect(md).toContain('Marked: Danmark');
   });
 });
