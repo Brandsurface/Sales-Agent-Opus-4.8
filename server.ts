@@ -53,6 +53,7 @@ import { runDeliberation } from './server/ai/deliberate';
 import { runVisualDeliberation } from './server/ai/deliberateVisual';
 import { runCulturalScan } from './server/ai/culturalScan';
 import { runIdeaDeliberation } from './server/ai/deliberateIdea';
+import { runProspectScan, EXEMPLAR_DEFAULT_SELLER } from './server/ai/prospectScan';
 import { getImageProvider } from './server/image/provider';
 import { generateLogoSvg } from './server/image/recraftVector';
 import { generateVideo } from './server/video/kling';
@@ -377,6 +378,46 @@ async function startServer() {
       }
       console.error('Fejl under kulturel scanning:', error);
       res.status(500).json({ error: error.message || 'Kulturel scanning fejlede.' });
+    }
+  });
+
+  // Prospect Radar: dyb salgs-research af én målvirksomhed (streaming via SSE)
+  app.post('/api/prospect-scan', async (req, res) => {
+    const { company, sellerProfile } = req.body;
+    if (!company || !String(company).trim()) {
+      return res.status(400).json({ error: 'Firmanavn eller website er påkrævet.' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    res.write(': connected\n\n');
+
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) res.write(': keep-alive\n\n');
+    }, 15000);
+
+    try {
+      const brief = await runProspectScan(
+        String(company).trim(),
+        sellerProfile ?? EXEMPLAR_DEFAULT_SELLER,
+        (e) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`); },
+      );
+      res.write(`data: ${JSON.stringify({ done: true, brief })}\n\n`);
+      res.write('data: [DONE]\n\n');
+    } catch (error: any) {
+      console.error('Fejl under prospect-scan:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message || 'Prospect-scan fejlede.' });
+      } else if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.write('data: [DONE]\n\n');
+      }
+    } finally {
+      clearInterval(heartbeat);
+      if (!res.writableEnded) res.end();
     }
   });
 
