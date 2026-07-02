@@ -4,6 +4,9 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from './anthropic';
+import { config } from './config';
+import { cacheableSystem } from './prompts';
 
 // ---------------------------------------------------------------------------
 // Typer
@@ -201,3 +204,110 @@ export const prospectBriefTool: Anthropic.Tool = {
     ],
   },
 };
+
+// ---------------------------------------------------------------------------
+// Efterretningsindsamling (multi-turn web_search)
+// ---------------------------------------------------------------------------
+
+const WEB_SEARCH_BETA = 'web-search-2025-03-05';
+
+export interface GatherResult {
+  memo: string;
+  sources: string[];
+  webSearchUsed: boolean;
+}
+
+const GATHER_SYSTEM = `Du er B2B-salgsanalytiker og research-specialist. Din opgave er at grave dybt i ÉN målvirksomhed via websøgning, så en sælger kan ringe dem op med en konkret, velinformeret grund.
+
+Søg systematisk efter (søg på både dansk og engelsk):
+1. Firma-overblik: hvad laver de, kategori, marked, størrelse
+2. Produktlinjer og nøgleprodukter/SKU'er
+3. Emballage-situation: materialer, format, bæredygtighed, seneste redesigns
+4. Retail/distribution og listinger
+5. Nyheder de seneste 6-18 mdr.: lanceringer, rebrands, ekspansion, kapital, awards, bæredygtighedsløfter
+6. Sandsynlige beslutningstagere (brand, marketing, emballage, indkøb)
+7. Konkurrenter og hvordan de præsenterer emballage
+
+Principper:
+- Brug web_search til konkrete, aktuelle fund — ikke generelle betragtninger fra din træningsdata.
+- Angiv en kilde-URL efter hvert konkret fund.
+- Gæt aldrig navne eller tal. Markér det du IKKE kunne finde.
+
+Når du har søgt bredt nok, SKRIV en grundig research-memo på dansk med de konkrete fund og kilder i parentes. Skriv KUN memoen som almindelig tekst — kald ingen værktøjer i din afsluttende besked.`;
+
+function extractUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s)\]]+/g) ?? [];
+  return Array.from(new Set(matches.map((u) => u.replace(/[.,;]+$/, ''))));
+}
+
+export async function gatherIntel(
+  company: string,
+  sellerProfile: SellerProfile,
+  onProgress?: (step: string) => void,
+  signal?: AbortSignal,
+): Promise<GatherResult> {
+  const initialPrompt = `Research målvirksomheden "${company}" grundigt via websøgning.
+
+${sellerProfileText(sellerProfile)}
+
+Brug sælger-konteksten til at prioritere: led især efter tegn på købs-triggers og på emballage-typer sælgeren dækker.
+
+Søg systematisk efter firma-overblik, produkter, emballage-situation, retail, nyheder, beslutningstagere og konkurrenter. Afslut med en grundig research-memo på dansk med kilder.`;
+
+  const systemBlocks = cacheableSystem([GATHER_SYSTEM]);
+  const messages: Anthropic.MessageParam[] = [
+    { role: 'user', content: [{ type: 'text', text: initialPrompt }] },
+  ];
+  const webSearchTool = { type: 'web_search_20250305', name: 'web_search' } as unknown as Anthropic.Tool;
+
+  onProgress?.('Firma-overblik & produkter');
+
+  let memo = '';
+  let maxTurns = 14;
+  let searchTurns = 0;
+
+  while (maxTurns-- > 0) {
+    let response: Anthropic.Message;
+    try {
+      response = await anthropic.messages.create(
+        {
+          model: config.model,
+          max_tokens: 4000,
+          system: systemBlocks,
+          tools: [webSearchTool],
+          messages,
+        },
+        { signal, headers: { 'anthropic-beta': WEB_SEARCH_BETA } } as any,
+      );
+    } catch (err: any) {
+      if (err?.status === 400 && String(err?.message ?? '').includes('web_search')) {
+        console.warn('[prospect-scan] Web search utilgængelig — falder tilbage til videnbaseret.');
+        return { memo, sources: extractUrls(memo), webSearchUsed: false };
+      }
+      throw err;
+    }
+
+    const textBlocks = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text);
+    if (textBlocks.length) memo = textBlocks.join('\n');
+
+    messages.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason === 'end_turn') {
+      if (memo.trim()) return { memo, sources: extractUrls(memo), webSearchUsed: true };
+      messages.push({
+        role: 'user',
+        content: [{ type: 'text', text: 'Skriv nu den samlede research-memo på dansk med kilder.' }],
+      });
+      continue;
+    }
+
+    // pause_turn / server-tool-turn: fortsæt løkken med den akkumulerede samtale.
+    searchTurns++;
+    if (searchTurns === 3) onProgress?.('Nyheder, emballage & beslutningstagere');
+    if (searchTurns === 6) onProgress?.('Konkurrenter & retail');
+  }
+
+  return { memo, sources: extractUrls(memo), webSearchUsed: true };
+}
