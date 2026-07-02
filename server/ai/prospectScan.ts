@@ -7,6 +7,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { anthropic } from './anthropic';
 import { config } from './config';
 import { cacheableSystem } from './prompts';
+import { generateStructured } from './structured';
 
 // ---------------------------------------------------------------------------
 // Typer
@@ -310,4 +311,78 @@ Søg systematisk efter firma-overblik, produkter, emballage-situation, retail, n
   }
 
   return { memo, sources: extractUrls(memo), webSearchUsed: true };
+}
+
+// ---------------------------------------------------------------------------
+// Syntese (Opus) + to-fase orkestrering
+// ---------------------------------------------------------------------------
+
+const SYNTHESIS_SYSTEM = `Du er senior B2B-salgsstrateg. Du modtager en research-memo om én målvirksomhed og en sælger-profil, og du forvandler det til en skarp opkalds-briefing på dansk.
+
+Regler (kritiske — briefingen bruges til rigtige opkald):
+- Hver faktapåstand om virksomheden og hvert signal skal kunne spores til memoen. Opfind aldrig navne, tal eller citater.
+- Er noget ikke fundet, så skriv "ukendt" — gæt aldrig. Udfyld kun decisionMakers.name ved konkret fund.
+- Skeln bevis fra antagelse: gap.evidence skal referere til noget fra memoen; sellerAngle og valueForThem må være ræsonnement.
+- Se ALT gennem sælger-linsen: hvor ville sælgerens tilbud konkret hjælpe NETOP denne virksomhed?
+- confidence.level afspejler mængden af verificerbar evidens (høj/middel/lav).
+- Skriv alt på dansk, også for internationale virksomheder.
+
+Afslut ved at kalde submit_prospect_brief med den fulde, strukturerede briefing.`;
+
+export type ProspectProgress =
+  | { phase: 'gathering'; step: string }
+  | { phase: 'synthesizing' };
+
+export async function synthesizeBrief(
+  company: string,
+  gather: GatherResult,
+  sellerProfile: SellerProfile,
+  signal?: AbortSignal,
+): Promise<ProspectBrief> {
+  const knowledgeOnlyNote = gather.webSearchUsed
+    ? ''
+    : '\n\nBEMÆRK: Websøgning var ikke tilgængelig. Basér briefingen på din videnbase, sæt confidence.level = "lav", og skriv i noten at fundene ikke er web-verificerede.';
+
+  const user = `MÅLVIRKSOMHED: ${company}
+
+${sellerProfileText(sellerProfile)}
+
+RESEARCH-MEMO FRA INDSAMLINGEN:
+${gather.memo.trim() || '(ingen web-fund tilgængelige)'}
+
+KENDTE KILDER: ${gather.sources.length ? gather.sources.join(', ') : 'ingen'}
+
+Syntetisér nu den fulde opkalds-briefing. Skriv på dansk. Aflever via submit_prospect_brief.${knowledgeOnlyNote}`;
+
+  const brief = await generateStructured<ProspectBrief>({
+    system: cacheableSystem([SYNTHESIS_SYSTEM]),
+    userContent: [{ type: 'text', text: user }],
+    tool: prospectBriefTool,
+    model: config.creativeModel,
+    maxTokens: 6000,
+    signal,
+  });
+
+  brief.researchedAt = brief.researchedAt || new Date().toISOString();
+  if ((!brief.sources || brief.sources.length === 0) && gather.sources.length) {
+    brief.sources = gather.sources;
+  }
+  return brief;
+}
+
+export async function runProspectScan(
+  company: string,
+  sellerProfile: SellerProfile,
+  onProgress: (e: ProspectProgress) => void,
+  signal?: AbortSignal,
+): Promise<ProspectBrief> {
+  if (signal?.aborted) throw new Error('Annulleret.');
+  const gather = await gatherIntel(
+    company,
+    sellerProfile,
+    (step) => onProgress({ phase: 'gathering', step }),
+    signal,
+  );
+  onProgress({ phase: 'synthesizing' });
+  return synthesizeBrief(company, gather, sellerProfile, signal);
 }
