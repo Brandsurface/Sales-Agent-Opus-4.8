@@ -1,0 +1,83 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { ProspectBrief } from '../types';
+
+export function prospectBriefToMarkdown(brief: ProspectBrief): string {
+  const c = brief.company;
+  const lines: string[] = [];
+
+  lines.push(`# Prospect Radar — ${c.name}`);
+  lines.push('');
+  lines.push(`*Researchet ${new Date(brief.researchedAt).toLocaleString('da-DK')} · Konfidens: ${brief.confidence.level}*`);
+  lines.push('');
+  lines.push(`## Grund til at ringe`);
+  lines.push(brief.reasonToCall);
+  lines.push('');
+  lines.push(`**Åbningsreplik:** ${brief.openingLine}`);
+  lines.push('');
+
+  lines.push(`## Firma`);
+  lines.push(`- **Website:** ${c.website}`);
+  lines.push(`- **Kategori:** ${c.category}`);
+  lines.push(`- **Hvad de laver:** ${c.whatTheyDo}`);
+  lines.push(`- **Størrelse:** ${c.sizeSignal}`);
+  lines.push(`- **Nøgleprodukter:** ${c.keyProducts.join(', ') || 'ukendt'}`);
+  lines.push(`- **Emballage-situation:** ${c.packagingContext}`);
+  lines.push('');
+
+  lines.push(`## Mangler & behov`);
+  brief.gaps.forEach((g, i) => {
+    lines.push(`${i + 1}. **${g.gap}**`);
+    lines.push(`   - Bevis: ${g.evidence}`);
+    lines.push(`   - Exemplar-vinkel: ${g.sellerAngle}`);
+    lines.push(`   - Værdi for dem: ${g.valueForThem}`);
+  });
+  lines.push('');
+
+  lines.push(`## Signaler`);
+  brief.signals.forEach((s) => {
+    lines.push(`- **${s.signal}** (${s.timeframe}) — ${s.whyItMatters}${s.sourceUrl ? ` [kilde](${s.sourceUrl})` : ''}`);
+  });
+  lines.push('');
+
+  lines.push(`## Talking points`);
+  brief.talkingPoints.forEach((t) => lines.push(`- ${t}`));
+  lines.push('');
+
+  lines.push(`## Smarte spørgsmål`);
+  brief.smartQuestions.forEach((q) => lines.push(`- ${q}`));
+  lines.push('');
+
+  lines.push(`## Beslutningstagere`);
+  brief.decisionMakers.forEach((d) => lines.push(`- **${d.role}**${d.name ? ` (${d.name})` : ''} — ${d.rationale}`));
+  lines.push('');
+
+  if (brief.competitors.length) {
+    lines.push(`## Konkurrenter`);
+    brief.competitors.forEach((k) => lines.push(`- **${k.name}** — ${k.packagingNote}`));
+    lines.push('');
+  }
+
+  lines.push(`## Kilder`);
+  brief.sources.forEach((u) => lines.push(`- ${u}`));
+  lines.push('');
+  lines.push(`> Konfidens-note: ${brief.confidence.note}`);
+
+  return lines.join('\n');
+}
+
+export function downloadProspectMarkdown(brief: ProspectBrief): void {
+  const md = prospectBriefToMarkdown(brief);
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `prospect-${brief.company.name.replace(/[^\w-]+/g, '_').toLowerCase()}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
