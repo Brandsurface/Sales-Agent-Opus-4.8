@@ -448,6 +448,8 @@ export interface ProspectCompany {
   packagingContext: string;
 }
 
+export type ProspectMarket = 'DK' | 'SE' | 'DE' | 'NO';
+
 export interface ProspectBrief {
   company: ProspectCompany;
   signals: ProspectSignal[];
@@ -461,4 +463,5 @@ export interface ProspectBrief {
   sources: string[];
   confidence: ProspectConfidence;
   researchedAt: string;
+  market: ProspectMarket;
 }

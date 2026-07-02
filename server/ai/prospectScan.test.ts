@@ -4,7 +4,7 @@ vi.mock('./structured', () => ({ generateStructured: vi.fn() }));
 import { anthropic } from './anthropic';
 import { generateStructured } from './structured';
 import { config } from './config';
-import { prospectBriefTool, sellerProfileText, EXEMPLAR_DEFAULT_SELLER, gatherIntel, runProspectScan } from './prospectScan';
+import { prospectBriefTool, sellerProfileText, EXEMPLAR_DEFAULT_SELLER, gatherIntel, runProspectScan, marketLanguage } from './prospectScan';
 
 const mockedCreate = vi.mocked(anthropic.messages.create);
 const mockedStructured = vi.mocked(generateStructured);
@@ -43,7 +43,7 @@ describe('gatherIntel', () => {
       stop_reason: 'end_turn',
     } as any);
 
-    const result = await gatherIntel('Acme', EXEMPLAR_DEFAULT_SELLER);
+    const result = await gatherIntel('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK');
 
     expect(result.webSearchUsed).toBe(true);
     expect(result.memo).toContain('Acme lancerede');
@@ -54,7 +54,7 @@ describe('gatherIntel', () => {
   it('falls back gracefully when web search is unavailable', async () => {
     mockedCreate.mockRejectedValueOnce(Object.assign(new Error('web_search not supported on this tier'), { status: 400 }));
 
-    const result = await gatherIntel('Acme', EXEMPLAR_DEFAULT_SELLER);
+    const result = await gatherIntel('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK');
 
     expect(result.webSearchUsed).toBe(false);
     expect(result.memo).toBe('');
@@ -73,7 +73,7 @@ describe('runProspectScan', () => {
     mockedStructured.mockResolvedValueOnce(fakeBrief as any);
 
     const phases: string[] = [];
-    const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, (e) => phases.push(e.phase));
+    const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', (e) => phases.push(e.phase));
 
     expect(phases).toContain('gathering');
     expect(phases).toContain('synthesizing');
@@ -91,7 +91,7 @@ describe('runProspectScan', () => {
     mockedCreate.mockRejectedValueOnce(Object.assign(new Error('web_search not supported'), { status: 400 }));
     mockedStructured.mockResolvedValueOnce(fakeBrief as any);
 
-    await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, () => {});
+    await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {});
 
     const userText = (mockedStructured.mock.calls[0][0].userContent[0] as any).text as string;
     expect(userText).toContain('Websøgning var ikke tilgængelig');
@@ -101,9 +101,60 @@ describe('runProspectScan', () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, () => {}, controller.signal),
+      runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {}, controller.signal),
     ).rejects.toThrow();
     expect(mockedCreate).not.toHaveBeenCalled();
     expect(mockedStructured).not.toHaveBeenCalled();
+  });
+});
+
+describe('multi-market', () => {
+  beforeEach(() => { mockedCreate.mockReset(); mockedStructured.mockReset(); });
+
+  it('maps each market to its language', () => {
+    expect(marketLanguage('DK')).toBe('dansk');
+    expect(marketLanguage('SE')).toBe('svensk');
+    expect(marketLanguage('DE')).toBe('tysk');
+    expect(marketLanguage('NO')).toBe('norsk');
+  });
+
+  it('gather searches in the market language and names the market (non-DK)', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    await gatherIntel('Acme', EXEMPLAR_DEFAULT_SELLER, 'SE');
+    const sentText = (mockedCreate.mock.calls[0][0] as any).messages[0].content[0].text as string;
+    expect(sentText).toContain('svensk');
+    expect(sentText).toContain('Sverige');
+  });
+
+  it('synthesis localises the spoken fields for non-DK markets', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DE', () => {});
+    const userText = (mockedStructured.mock.calls[0][0].userContent[0] as any).text as string;
+    expect(userText).toContain('tysk');
+    expect(userText).toContain('openingLine');
+  });
+
+  it('keeps DK all-Danish', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {});
+    const userText = (mockedStructured.mock.calls[0][0].userContent[0] as any).text as string;
+    expect(userText).toContain('HELE briefingen på dansk');
+  });
+
+  it('stamps brief.market from the requested market', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'NO', () => {});
+    expect(brief.market).toBe('NO');
   });
 });

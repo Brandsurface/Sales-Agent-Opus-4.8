@@ -383,7 +383,7 @@ async function startServer() {
 
   // Prospect Radar: dyb salgs-research af én målvirksomhed (streaming via SSE)
   app.post('/api/prospect-scan', async (req, res) => {
-    const { company, sellerProfile } = req.body;
+    const { company, sellerProfile, market } = req.body;
     if (!company || !String(company).trim()) {
       return res.status(400).json({ error: 'Firmanavn eller website er påkrævet.' });
     }
@@ -400,9 +400,11 @@ async function startServer() {
     }, 15000);
 
     try {
+      const validMarket = ['DK', 'SE', 'DE', 'NO'].includes(market) ? market : 'DK';
       const brief = await runProspectScan(
         String(company).trim(),
         sellerProfile ?? EXEMPLAR_DEFAULT_SELLER,
+        validMarket,
         (e) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`); },
       );
       res.write(`data: ${JSON.stringify({ done: true, brief })}\n\n`);

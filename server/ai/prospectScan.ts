@@ -62,6 +62,8 @@ export interface ProspectCompany {
   packagingContext: string;
 }
 
+export type ProspectMarket = 'DK' | 'SE' | 'DE' | 'NO';
+
 export interface ProspectBrief {
   company: ProspectCompany;
   signals: ProspectSignal[];
@@ -75,6 +77,18 @@ export interface ProspectBrief {
   sources: string[];
   confidence: ProspectConfidence;
   researchedAt: string;
+  market: ProspectMarket;
+}
+
+const MARKET_LANGUAGE: Record<ProspectMarket, string> = {
+  DK: 'dansk', SE: 'svensk', DE: 'tysk', NO: 'norsk',
+};
+const MARKET_LABEL: Record<ProspectMarket, string> = {
+  DK: 'Danmark', SE: 'Sverige', DE: 'Tyskland', NO: 'Norge',
+};
+
+export function marketLanguage(market: ProspectMarket): string {
+  return MARKET_LANGUAGE[market] ?? 'dansk';
 }
 
 // ---------------------------------------------------------------------------
@@ -244,10 +258,13 @@ function extractUrls(text: string): string[] {
 export async function gatherIntel(
   company: string,
   sellerProfile: SellerProfile,
+  market: ProspectMarket,
   onProgress?: (step: string) => void,
   signal?: AbortSignal,
 ): Promise<GatherResult> {
   const initialPrompt = `Research målvirksomheden "${company}" grundigt via websøgning.
+
+Målvirksomheden hører til på markedet ${MARKET_LABEL[market]}. Søg primært på ${marketLanguage(market)} og engelsk, og prioritér lokale kilder for det marked.
 
 ${sellerProfileText(sellerProfile)}
 
@@ -337,11 +354,17 @@ export async function synthesizeBrief(
   company: string,
   gather: GatherResult,
   sellerProfile: SellerProfile,
+  market: ProspectMarket,
   signal?: AbortSignal,
 ): Promise<ProspectBrief> {
   const knowledgeOnlyNote = gather.webSearchUsed
     ? ''
     : '\n\nBEMÆRK: Websøgning var ikke tilgængelig. Basér briefingen på din videnbase, sæt confidence.level = "lav", og skriv i noten at fundene ikke er web-verificerede.';
+
+  const lang = marketLanguage(market);
+  const languageInstruction = market === 'DK'
+    ? 'Skriv HELE briefingen på dansk.'
+    : `Skriv analysen (company, signals, gaps, reasonToCall, confidence, decisionMakers, competitors) på dansk. Skriv openingLine, talkingPoints og smartQuestions på ${lang} (kundens sprog), så sælgeren kan bruge dem direkte i opkaldet.`;
 
   const user = `MÅLVIRKSOMHED: ${company}
 
@@ -352,7 +375,7 @@ ${gather.memo.trim() || '(ingen web-fund tilgængelige)'}
 
 KENDTE KILDER: ${gather.sources.length ? gather.sources.join(', ') : 'ingen'}
 
-Syntetisér nu den fulde opkalds-briefing. Skriv på dansk. Aflever via submit_prospect_brief.${knowledgeOnlyNote}`;
+Syntetisér nu den fulde opkalds-briefing. ${languageInstruction} Aflever via submit_prospect_brief.${knowledgeOnlyNote}`;
 
   const brief = await generateStructured<ProspectBrief>({
     system: cacheableSystem([SYNTHESIS_SYSTEM]),
@@ -367,12 +390,14 @@ Syntetisér nu den fulde opkalds-briefing. Skriv på dansk. Aflever via submit_p
   if ((!brief.sources || brief.sources.length === 0) && gather.sources.length) {
     brief.sources = gather.sources;
   }
+  brief.market = market;
   return brief;
 }
 
 export async function runProspectScan(
   company: string,
   sellerProfile: SellerProfile,
+  market: ProspectMarket,
   onProgress: (e: ProspectProgress) => void,
   signal?: AbortSignal,
 ): Promise<ProspectBrief> {
@@ -380,9 +405,10 @@ export async function runProspectScan(
   const gather = await gatherIntel(
     company,
     sellerProfile,
+    market,
     (step) => onProgress({ phase: 'gathering', step }),
     signal,
   );
   onProgress({ phase: 'synthesizing' });
-  return synthesizeBrief(company, gather, sellerProfile, signal);
+  return synthesizeBrief(company, gather, sellerProfile, market, signal);
 }

@@ -15,6 +15,7 @@ const brief: ProspectBrief = {
   sources: ['https://acme.dk/news'],
   confidence: { level: 'middel', note: 'Delvist verificeret' },
   researchedAt: '2026-07-01T10:00:00.000Z',
+  market: 'DK',
 };
 
 describe('prospectBriefToMarkdown', () => {
