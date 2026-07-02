@@ -4,6 +4,7 @@
  */
 
 import type { ProspectBrief } from '../types';
+import { downloadTextFile, slugify } from './exportMarkdown';
 
 export function prospectBriefToMarkdown(brief: ProspectBrief): string {
   const c = brief.company;
@@ -32,7 +33,7 @@ export function prospectBriefToMarkdown(brief: ProspectBrief): string {
   brief.gaps.forEach((g, i) => {
     lines.push(`${i + 1}. **${g.gap}**`);
     lines.push(`   - Bevis: ${g.evidence}`);
-    lines.push(`   - Exemplar-vinkel: ${g.sellerAngle}`);
+    lines.push(`   - Sælgervinkel: ${g.sellerAngle}`);
     lines.push(`   - Værdi for dem: ${g.valueForThem}`);
   });
   lines.push('');
@@ -71,13 +72,5 @@ export function prospectBriefToMarkdown(brief: ProspectBrief): string {
 
 export function downloadProspectMarkdown(brief: ProspectBrief): void {
   const md = prospectBriefToMarkdown(brief);
-  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `prospect-${brief.company.name.replace(/[^\w-]+/g, '_').toLowerCase()}.md`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadTextFile(`prospect-${slugify(brief.company.name)}.md`, md);
 }
