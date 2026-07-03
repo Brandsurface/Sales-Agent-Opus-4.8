@@ -175,7 +175,7 @@ export const prospectBriefTool: Anthropic.Tool = {
         },
       },
       reasonToCall: { type: 'string', description: 'Den skarpe, konkrete grund til at ringe.' },
-      openingLine: { type: 'string', description: 'Foreslået første sætning på dansk, klar til brug.' },
+      openingLine: { type: 'string', description: 'Foreslået første sætning på kundens sprog (markedets sprog), klar til brug.' },
       talkingPoints: { type: 'array', items: { type: 'string' }, description: '3-5 talking points.' },
       smartQuestions: { type: 'array', items: { type: 'string' }, description: '3-5 spørgsmål at stille.' },
       decisionMakers: {
