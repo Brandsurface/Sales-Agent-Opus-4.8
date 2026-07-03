@@ -4,7 +4,7 @@ vi.mock('./structured', () => ({ generateStructured: vi.fn() }));
 import { anthropic } from './anthropic';
 import { generateStructured } from './structured';
 import { config } from './config';
-import { prospectBriefTool, sellerProfileText, EXEMPLAR_DEFAULT_SELLER, gatherIntel, runProspectScan, marketLanguage } from './prospectScan';
+import { prospectBriefTool, sellerProfileText, EXEMPLAR_DEFAULT_SELLER, gatherIntel, runProspectScan, marketLanguage, sanitizeEngineOptions } from './prospectScan';
 
 const mockedCreate = vi.mocked(anthropic.messages.create);
 const mockedStructured = vi.mocked(generateStructured);
@@ -259,5 +259,44 @@ describe('pres-test (critique → sharpen)', () => {
       .mockRejectedValueOnce(new Error('boom'));
     const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {});
     expect(brief.openingLine).toBe(fakeBrief.openingLine);
+  });
+});
+
+describe('engine options', () => {
+  beforeEach(() => { mockedCreate.mockReset(); mockedStructured.mockReset(); });
+
+  it('sanitizes model against the allowlist and clamps maxTokens', () => {
+    expect(sanitizeEngineOptions({ synthesisModel: 'claude-haiku-4-5', maxTokens: 8000 }))
+      .toEqual({ synthesisModel: 'claude-haiku-4-5', maxTokens: 8000 });
+    expect(sanitizeEngineOptions({ synthesisModel: 'gpt-4', maxTokens: 500 }))
+      .toEqual({ maxTokens: 2000 });
+    expect(sanitizeEngineOptions({ maxTokens: 50000 })).toEqual({ maxTokens: 16000 });
+    expect(sanitizeEngineOptions({ maxTokens: 'abc' })).toEqual({});
+    expect(sanitizeEngineOptions(undefined)).toEqual({});
+  });
+
+  it('threads the chosen model and maxTokens into synthesis', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockResolvedValueOnce(strongCritique as any);
+    await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {}, undefined,
+      { synthesisModel: 'claude-haiku-4-5', maxTokens: 4000 });
+    const opts = mockedStructured.mock.calls[0][0];
+    expect(opts.model).toBe('claude-haiku-4-5');
+    expect(opts.maxTokens).toBe(4000);
+  });
+
+  it('defaults to creativeModel when no options given', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockResolvedValueOnce(strongCritique as any);
+    await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {});
+    expect(mockedStructured.mock.calls[0][0].model).toBe(config.creativeModel);
   });
 });

@@ -479,3 +479,8 @@ export interface ProspectBrief {
   researchedAt: string;
   market: ProspectMarket;
 }
+
+export interface ProspectEngineOptions {
+  synthesisModel?: string;
+  maxTokens?: number;
+}

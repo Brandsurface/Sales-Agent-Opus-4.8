@@ -53,7 +53,7 @@ import { runDeliberation } from './server/ai/deliberate';
 import { runVisualDeliberation } from './server/ai/deliberateVisual';
 import { runCulturalScan } from './server/ai/culturalScan';
 import { runIdeaDeliberation } from './server/ai/deliberateIdea';
-import { runProspectScan, EXEMPLAR_DEFAULT_SELLER } from './server/ai/prospectScan';
+import { runProspectScan, EXEMPLAR_DEFAULT_SELLER, sanitizeEngineOptions } from './server/ai/prospectScan';
 import { getImageProvider } from './server/image/provider';
 import { generateLogoSvg } from './server/image/recraftVector';
 import { generateVideo } from './server/video/kling';
@@ -383,7 +383,7 @@ async function startServer() {
 
   // Prospect Radar: dyb salgs-research af én målvirksomhed (streaming via SSE)
   app.post('/api/prospect-scan', async (req, res) => {
-    const { company, sellerProfile, market } = req.body;
+    const { company, sellerProfile, market, engineOptions } = req.body;
     if (!company || !String(company).trim()) {
       return res.status(400).json({ error: 'Firmanavn eller website er påkrævet.' });
     }
@@ -406,6 +406,8 @@ async function startServer() {
         sellerProfile ?? EXEMPLAR_DEFAULT_SELLER,
         validMarket,
         (e) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`); },
+        undefined,
+        sanitizeEngineOptions(engineOptions),
       );
       res.write(`data: ${JSON.stringify({ done: true, brief })}\n\n`);
       res.write('data: [DONE]\n\n');

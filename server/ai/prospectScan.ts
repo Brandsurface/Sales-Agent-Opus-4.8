@@ -105,6 +105,33 @@ export function marketLanguage(market: ProspectMarket): string {
   return MARKET_LANGUAGE[market] ?? 'dansk';
 }
 
+export interface ProspectEngineOptions {
+  synthesisModel?: string;
+  maxTokens?: number;
+}
+
+export const PROSPECT_MODEL_ALLOWLIST = [
+  'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5',
+] as const;
+
+const MAX_TOKENS_MIN = 2000;
+const MAX_TOKENS_MAX = 16000;
+
+export function sanitizeEngineOptions(raw: unknown): ProspectEngineOptions {
+  const out: ProspectEngineOptions = {};
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, unknown>;
+    if (typeof r.synthesisModel === 'string' && (PROSPECT_MODEL_ALLOWLIST as readonly string[]).includes(r.synthesisModel)) {
+      out.synthesisModel = r.synthesisModel;
+    }
+    const n = Number(r.maxTokens);
+    if (Number.isFinite(n)) {
+      out.maxTokens = Math.min(Math.max(Math.round(n), MAX_TOKENS_MIN), MAX_TOKENS_MAX);
+    }
+  }
+  return out;
+}
+
 export interface ProspectCritique {
   specificityScore: number;
   evidenceScore: number;
@@ -429,6 +456,7 @@ export async function synthesizeBrief(
   sellerProfile: SellerProfile,
   market: ProspectMarket,
   signal?: AbortSignal,
+  options?: ProspectEngineOptions,
 ): Promise<ProspectBrief> {
   const knowledgeOnlyNote = gather.webSearchUsed
     ? ''
@@ -454,8 +482,8 @@ Syntetisér nu den fulde opkalds-briefing. ${languageInstruction} Aflever via su
     system: cacheableSystem([SYNTHESIS_SYSTEM]),
     userContent: [{ type: 'text', text: user }],
     tool: prospectBriefTool,
-    model: config.creativeModel,
-    maxTokens: 6000,
+    model: options?.synthesisModel ?? config.creativeModel,
+    maxTokens: options?.maxTokens ?? 6000,
     signal,
   });
 
@@ -510,6 +538,7 @@ export async function sharpenBrief(
   sellerProfile: SellerProfile,
   market: ProspectMarket,
   signal?: AbortSignal,
+  options?: ProspectEngineOptions,
 ): Promise<ProspectBrief> {
   const user = `${sellerProfileText(sellerProfile)}
 
@@ -528,8 +557,8 @@ Skriv den skærpede briefing og aflever via submit_prospect_brief.`;
     system: cacheableSystem([SHARPEN_SYSTEM]),
     userContent: [{ type: 'text', text: user }],
     tool: prospectBriefTool,
-    model: config.creativeModel,
-    maxTokens: 6000,
+    model: options?.synthesisModel ?? config.creativeModel,
+    maxTokens: options?.maxTokens ?? 6000,
     signal,
   });
   sharpened.researchedAt = sharpened.researchedAt || brief.researchedAt;
@@ -544,6 +573,7 @@ export async function runProspectScan(
   market: ProspectMarket,
   onProgress: (e: ProspectProgress) => void,
   signal?: AbortSignal,
+  options?: ProspectEngineOptions,
 ): Promise<ProspectBrief> {
   if (signal?.aborted) throw new Error('Annulleret.');
   const gather = await gatherIntel(
@@ -554,7 +584,7 @@ export async function runProspectScan(
     signal,
   );
   onProgress({ phase: 'synthesizing' });
-  const brief = await synthesizeBrief(company, gather, sellerProfile, market, signal);
+  const brief = await synthesizeBrief(company, gather, sellerProfile, market, signal, options);
   try {
     onProgress({ phase: 'critiquing' });
     const critique = await critiqueBrief(brief, sellerProfile, signal);
@@ -564,7 +594,7 @@ export async function runProspectScan(
       critique.relevanceScore >= CRITIQUE_THRESHOLD;
     if (passed) return brief;
     onProgress({ phase: 'sharpening' });
-    return await sharpenBrief(brief, critique, sellerProfile, market, signal);
+    return await sharpenBrief(brief, critique, sellerProfile, market, signal, options);
   } catch (err) {
     // Pres-testen er en forbedring, ikke en port: fejler den, leveres den gode briefing.
     console.warn('[prospect-scan] Pres-test fejlede — leverer uskærpet briefing:', (err as Error)?.message);
