@@ -433,6 +433,17 @@ export interface ProspectCompetitor {
   packagingNote: string;
 }
 
+export interface CallAngle {
+  angle: string;
+  openingLine: string;
+  rationale: string;
+}
+
+export interface ProspectObjection {
+  objection: string;
+  response: string;
+}
+
 export interface ProspectConfidence {
   level: 'høj' | 'middel' | 'lav';
   note: string;
@@ -456,6 +467,9 @@ export interface ProspectBrief {
   gaps: ProspectGap[];
   reasonToCall: string;
   openingLine: string;
+  whyNow: string;
+  callAngles: CallAngle[];
+  objections: ProspectObjection[];
   talkingPoints: string[];
   smartQuestions: string[];
   decisionMakers: DecisionMaker[];

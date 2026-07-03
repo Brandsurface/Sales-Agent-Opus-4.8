@@ -47,6 +47,17 @@ export interface ProspectCompetitor {
   packagingNote: string;
 }
 
+export interface CallAngle {
+  angle: string;
+  openingLine: string;
+  rationale: string;
+}
+
+export interface ProspectObjection {
+  objection: string;
+  response: string;
+}
+
 export interface ProspectConfidence {
   level: 'høj' | 'middel' | 'lav';
   note: string;
@@ -70,6 +81,9 @@ export interface ProspectBrief {
   gaps: ProspectGap[];
   reasonToCall: string;
   openingLine: string;
+  whyNow: string;
+  callAngles: CallAngle[];
+  objections: ProspectObjection[];
   talkingPoints: string[];
   smartQuestions: string[];
   decisionMakers: DecisionMaker[];
@@ -176,6 +190,32 @@ export const prospectBriefTool: Anthropic.Tool = {
       },
       reasonToCall: { type: 'string', description: 'Den skarpe, konkrete grund til at ringe.' },
       openingLine: { type: 'string', description: 'Foreslået første sætning på kundens sprog (markedets sprog), klar til brug.' },
+      whyNow: { type: 'string', description: 'Hvorfor ringe NETOP NU: timing-vindue forankret i konkrete fund (lancering, messe, deadline, sæson). Dansk.' },
+      callAngles: {
+        type: 'array',
+        description: '2-3 markant forskellige ringe-vinkler (fx nyhedsvinkel, smertevinkel, konkurrentvinkel). Den bedste vinkels openingLine SKAL også stå i topfeltet openingLine.',
+        items: {
+          type: 'object',
+          properties: {
+            angle: { type: 'string', description: 'Vinklens navn/type. Dansk.' },
+            openingLine: { type: 'string', description: 'Klar-til-brug første sætning på kundens sprog.' },
+            rationale: { type: 'string', description: 'Hvorfor denne vinkel kan virke — forankret i fundene. Dansk.' },
+          },
+          required: ['angle', 'openingLine', 'rationale'],
+        },
+      },
+      objections: {
+        type: 'array',
+        description: '2-3 sandsynlige indvendinger med foreslået svar.',
+        items: {
+          type: 'object',
+          properties: {
+            objection: { type: 'string', description: 'Den sandsynlige indvending. Dansk.' },
+            response: { type: 'string', description: 'Foreslået svar på kundens sprog.' },
+          },
+          required: ['objection', 'response'],
+        },
+      },
       talkingPoints: { type: 'array', items: { type: 'string' }, description: '3-5 talking points.' },
       smartQuestions: { type: 'array', items: { type: 'string' }, description: '3-5 spørgsmål at stille.' },
       decisionMakers: {
@@ -214,6 +254,7 @@ export const prospectBriefTool: Anthropic.Tool = {
     },
     required: [
       'company', 'signals', 'gaps', 'reasonToCall', 'openingLine',
+      'whyNow', 'callAngles', 'objections',
       'talkingPoints', 'smartQuestions', 'decisionMakers', 'competitors',
       'sources', 'confidence', 'researchedAt',
     ],
@@ -242,6 +283,10 @@ Søg systematisk efter (søg på både dansk og engelsk):
 5. Nyheder de seneste 6-18 mdr.: lanceringer, rebrands, ekspansion, kapital, awards, bæredygtighedsløfter
 6. Sandsynlige beslutningstagere (brand, marketing, emballage, indkøb)
 7. Konkurrenter og hvordan de præsenterer emballage
+8. Jobopslag: ansætter de emballage-, brand-, marketing- eller indkøbsfolk? (karrieresider, LinkedIn, jobportaler)
+9. Messer og events: kommende deltagelse i messer eller udstillinger (stande kræver fysiske prøver)
+10. Bæredygtighedsløfter og -rapporter med konkrete mål/deadlines for emballage
+11. Fagpresse/brancheomtale
 
 Principper:
 - Brug web_search til konkrete, aktuelle fund — ikke generelle betragtninger fra din træningsdata.
@@ -343,6 +388,8 @@ Regler (kritiske — briefingen bruges til rigtige opkald):
 - Se ALT gennem sælger-linsen: hvor ville sælgerens tilbud konkret hjælpe NETOP denne virksomhed?
 - confidence.level afspejler mængden af verificerbar evidens (høj/middel/lav).
 - Skriv alt på dansk, også for internationale virksomheder.
+- whyNow skal forankres i konkrete, daterede fund — aldrig generisk "markedet bevæger sig hurtigt".
+- callAngles skal være 2-3 MARKANT forskellige vinkler (fx nyhedsvinkel, smertevinkel, konkurrentvinkel); den stærkeste vinkels openingLine gentages i topfeltet openingLine. objections skal være de 2-3 mest sandsynlige indvendinger med konkrete svar.
 
 Afslut ved at kalde submit_prospect_brief med den fulde, strukturerede briefing.`;
 
@@ -364,7 +411,7 @@ export async function synthesizeBrief(
   const lang = marketLanguage(market);
   const languageInstruction = market === 'DK'
     ? 'Skriv HELE briefingen på dansk.'
-    : `Skriv analysen (company, signals, gaps, reasonToCall, confidence, decisionMakers, competitors) på dansk. Skriv openingLine, talkingPoints og smartQuestions på ${lang} (kundens sprog), så sælgeren kan bruge dem direkte i opkaldet.`;
+    : `Skriv analysen (company, signals, gaps, reasonToCall, whyNow, confidence, decisionMakers, competitors, callAngles[].angle/rationale, objections[].objection) på dansk. Skriv openingLine, talkingPoints, smartQuestions, callAngles[].openingLine og objections[].response på ${lang} (kundens sprog), så sælgeren kan bruge dem direkte i opkaldet.`;
 
   const user = `MÅLVIRKSOMHED: ${company}
 

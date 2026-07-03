@@ -12,6 +12,8 @@ const mockedStructured = vi.mocked(generateStructured);
 const fakeBrief = {
   company: { name: 'Acme', website: 'acme.dk', category: 'FMCG', whatTheyDo: 'x', sizeSignal: 'ukendt', keyProducts: [], packagingContext: 'x' },
   signals: [], gaps: [], reasonToCall: 'r', openingLine: 'o', talkingPoints: [], smartQuestions: [],
+  whyNow: 'w',
+  callAngles: [], objections: [],
   decisionMakers: [], competitors: [], sources: [], confidence: { level: 'middel', note: 'n' }, researchedAt: '',
 };
 
@@ -156,5 +158,39 @@ describe('multi-market', () => {
     mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
     const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'NO', () => {});
     expect(brief.market).toBe('NO');
+  });
+});
+
+describe('quality fields', () => {
+  beforeEach(() => { mockedCreate.mockReset(); mockedStructured.mockReset(); });
+
+  it('requires whyNow, callAngles and objections in the schema', () => {
+    const req = (prospectBriefTool.input_schema as any).required as string[];
+    for (const key of ['whyNow', 'callAngles', 'objections']) expect(req).toContain(key);
+  });
+
+  it('gather checklist covers job postings, fairs, sustainability and trade press', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    await gatherIntel('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK');
+    const system = JSON.stringify((mockedCreate.mock.calls[0][0] as any).system);
+    for (const probe of ['Jobopslag', 'messer', 'Bæredygtighedsløfter', 'Fagpresse']) {
+      expect(system).toContain(probe);
+    }
+  });
+
+  it('synthesis instructs angles, whyNow and objections, and localises spoken fields (non-DK)', async () => {
+    mockedCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+    } as any);
+    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'SE', () => {});
+    const userText = (mockedStructured.mock.calls[0][0].userContent[0] as any).text as string;
+    expect(userText).toContain('callAngles');
+    expect(userText).toContain('objections');
+    expect(userText).toContain('svensk');
+    const system = JSON.stringify(mockedStructured.mock.calls[0][0].system);
+    expect(system).toContain('whyNow');
   });
 });
