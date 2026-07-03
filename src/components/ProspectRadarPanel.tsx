@@ -9,6 +9,12 @@ import { ProspectBrief, SellerProfile, ProspectMarket } from '../types';
 import { MARKETS } from '../lib/market';
 import { prospectBriefToMarkdown, downloadProspectMarkdown } from '../lib/prospectExport';
 
+const MODEL_OPTIONS: { value: string; label: string }[] = [
+  { value: 'claude-opus-4-8', label: 'Opus 4.8 — bedst kvalitet' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6 — balanceret' },
+  { value: 'claude-haiku-4-5', label: 'Haiku 4.5 — hurtigst/billigst' },
+];
+
 interface ProspectRadarPanelProps {
   company: string;
   setCompany: (v: string) => void;
@@ -17,6 +23,10 @@ interface ProspectRadarPanelProps {
   sellerProfile: SellerProfile;
   setSellerProfile: (p: SellerProfile) => void;
   resetSellerProfile: () => void;
+  synthesisModel: string | undefined;
+  setSynthesisModel: (m: string | undefined) => void;
+  maxTokens: number | undefined;
+  setMaxTokens: (n: number | undefined) => void;
   brief: ProspectBrief | null;
   isResearching: boolean;
   progress: string | null;
@@ -27,9 +37,11 @@ interface ProspectRadarPanelProps {
 export function ProspectRadarPanel({
   company, setCompany, market, setMarket,
   sellerProfile, setSellerProfile, resetSellerProfile,
+  synthesisModel, setSynthesisModel, maxTokens, setMaxTokens,
   brief, isResearching, progress, onResearch, onClearBrief,
 }: ProspectRadarPanelProps) {
   const [showProfile, setShowProfile] = useState(false);
+  const [showEngine, setShowEngine] = useState(false);
 
   const copyAll = () => {
     if (brief) navigator.clipboard.writeText(prospectBriefToMarkdown(brief)).catch(() => {});
@@ -132,6 +144,43 @@ export function ProspectRadarPanel({
         )}
       </div>
 
+      {/* Avanceret: model + max tokens (foldbar) */}
+      <div className="text-xs">
+        <button onClick={() => setShowEngine((v) => !v)} className="text-slate-400 hover:text-slate-200 underline underline-offset-2">
+          {showEngine ? 'Skjul' : 'Vis'} avancerede indstillinger
+        </button>
+        {showEngine && (
+          <div className="mt-2 space-y-2 rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+            <label className="block">
+              <span className="text-slate-400">Claude-model (syntese)</span>
+              <select
+                value={synthesisModel ?? ''}
+                onChange={(e) => setSynthesisModel(e.target.value || undefined)}
+                className="mt-1 w-full rounded bg-slate-900 border border-slate-700 px-2 py-1 text-slate-100"
+              >
+                <option value="">Standard (Opus 4.8)</option>
+                {MODEL_OPTIONS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-slate-400">Max tokens (2.000–16.000)</span>
+              <input
+                type="number"
+                min={2000}
+                max={16000}
+                step={500}
+                value={maxTokens ?? ''}
+                onChange={(e) => setMaxTokens(e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="6000 (standard)"
+                className="mt-1 w-full rounded bg-slate-900 border border-slate-700 px-2 py-1 text-slate-100"
+              />
+            </label>
+          </div>
+        )}
+      </div>
+
       {/* Resultat */}
       {brief && (
         <div className="space-y-4 border-t border-slate-800 pt-4">
@@ -148,12 +197,15 @@ export function ProspectRadarPanel({
             <p className="text-[11px] font-mono uppercase tracking-wider text-orange-300">Grund til at ringe</p>
             <p className="mt-1 text-sm text-slate-100">{brief.reasonToCall}</p>
             <p className="mt-2 text-sm italic text-slate-300">"{brief.openingLine}"</p>
+            {brief.whyNow && <p className="mt-2 text-xs text-orange-200">Hvorfor nu: {brief.whyNow}</p>}
           </section>
 
+          <ProspectList title="Ringe-vinkler" items={brief.callAngles.map((a) => `${a.angle}: "${a.openingLine}" — ${a.rationale}`)} />
           <ProspectList title="Mangler & behov" items={brief.gaps.map((g) => `${g.gap} — ${g.sellerAngle} (bevis: ${g.evidence})`)} />
           <ProspectList title="Signaler" items={brief.signals.map((s) => `${s.signal} (${s.timeframe}) — ${s.whyItMatters}`)} />
           <ProspectList title="Talking points" items={brief.talkingPoints} />
           <ProspectList title="Smarte spørgsmål" items={brief.smartQuestions} />
+          <ProspectList title="Sandsynlige indvendinger" items={brief.objections.map((o) => `${o.objection} → ${o.response}`)} />
           <ProspectList title="Beslutningstagere" items={brief.decisionMakers.map((d) => `${d.role}${d.name ? ` (${d.name})` : ''} — ${d.rationale}`)} />
 
           {brief.sources.length > 0 && (

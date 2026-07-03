@@ -31,5 +31,10 @@ describe('prospectBriefToMarkdown', () => {
     expect(md).toContain('Ingen fysiske prøver');
     expect(md).toContain('https://acme.dk/news');
     expect(md).toContain('Marked: Danmark');
+    expect(md).toContain('Hvorfor nu');
+    expect(md).toContain('Ringe-vinkler');
+    expect(md).toContain('Nyhedsvinkel');
+    expect(md).toContain('Sandsynlige indvendinger');
+    expect(md).toContain('Vi har leverandør');
   });
 });

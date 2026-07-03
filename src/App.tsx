@@ -120,6 +120,8 @@ export default function App() {
     prospectCompany, setProspectCompany,
     prospectMarket, setProspectMarket,
     prospectSellerProfile, setProspectSellerProfile, resetProspectSellerProfile,
+    prospectSynthesisModel, setProspectSynthesisModel,
+    prospectMaxTokens, setProspectMaxTokens,
     prospectBrief, isResearchingProspect, prospectProgress,
     handleProspectResearch, handleClearProspectBrief,
   } = useContentMachine();
@@ -340,6 +342,10 @@ export default function App() {
               sellerProfile={prospectSellerProfile}
               setSellerProfile={setProspectSellerProfile}
               resetSellerProfile={resetProspectSellerProfile}
+              synthesisModel={prospectSynthesisModel}
+              setSynthesisModel={setProspectSynthesisModel}
+              maxTokens={prospectMaxTokens}
+              setMaxTokens={setProspectMaxTokens}
               brief={prospectBrief}
               isResearching={isResearchingProspect}
               progress={prospectProgress}

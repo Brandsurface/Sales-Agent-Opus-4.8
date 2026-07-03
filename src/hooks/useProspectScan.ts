@@ -12,6 +12,8 @@ import { detectMarketFromInput } from '../lib/market';
 const PROGRESS_LABELS: Record<string, string> = {
   gathering: 'Graver efter fund …',
   synthesizing: 'Syntetiserer briefing …',
+  critiquing: 'Pres-tester briefingen …',
+  sharpening: 'Skærper briefingen …',
 };
 
 /**
@@ -26,6 +28,8 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
   const [brief, setBrief] = useState<ProspectBrief | null>(null);
   const [isResearching, setIsResearching] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  const [synthesisModel, setSynthesisModel] = useState<string | undefined>(undefined);
+  const [maxTokens, setMaxTokens] = useState<number | undefined>(undefined);
 
   const setCompany = (v: string) => {
     setCompanyState(v);
@@ -51,7 +55,10 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
       const response = await fetch('/api/prospect-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: company.trim(), sellerProfile, market }),
+        body: JSON.stringify({
+          company: company.trim(), sellerProfile, market,
+          engineOptions: { synthesisModel, maxTokens },
+        }),
       });
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -100,6 +107,7 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
     company, setCompany,
     market, setMarket,
     sellerProfile, setSellerProfile, resetSellerProfile,
+    synthesisModel, setSynthesisModel, maxTokens, setMaxTokens,
     brief, isResearching, progress,
     handleResearch, handleClearBrief,
   };

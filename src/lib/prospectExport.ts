@@ -20,6 +20,7 @@ export function prospectBriefToMarkdown(brief: ProspectBrief): string {
   lines.push(brief.reasonToCall);
   lines.push('');
   lines.push(`**Åbningsreplik:** ${brief.openingLine}`);
+  if (brief.whyNow) lines.push(`**Hvorfor nu:** ${brief.whyNow}`);
   lines.push('');
 
   lines.push(`## Firma`);
@@ -30,6 +31,12 @@ export function prospectBriefToMarkdown(brief: ProspectBrief): string {
   lines.push(`- **Nøgleprodukter:** ${c.keyProducts.join(', ') || 'ukendt'}`);
   lines.push(`- **Emballage-situation:** ${c.packagingContext}`);
   lines.push('');
+
+  if (brief.callAngles.length) {
+    lines.push(`## Ringe-vinkler`);
+    brief.callAngles.forEach((a) => lines.push(`- **${a.angle}:** "${a.openingLine}" — ${a.rationale}`));
+    lines.push('');
+  }
 
   lines.push(`## Mangler & behov`);
   brief.gaps.forEach((g, i) => {
@@ -53,6 +60,12 @@ export function prospectBriefToMarkdown(brief: ProspectBrief): string {
   lines.push(`## Smarte spørgsmål`);
   brief.smartQuestions.forEach((q) => lines.push(`- ${q}`));
   lines.push('');
+
+  if (brief.objections.length) {
+    lines.push(`## Sandsynlige indvendinger`);
+    brief.objections.forEach((o) => lines.push(`- **${o.objection}** → ${o.response}`));
+    lines.push('');
+  }
 
   lines.push(`## Beslutningstagere`);
   brief.decisionMakers.forEach((d) => lines.push(`- **${d.role}**${d.name ? ` (${d.name})` : ''} — ${d.rationale}`));
