@@ -17,6 +17,10 @@ const fakeBrief = {
   decisionMakers: [], competitors: [], sources: [], confidence: { level: 'middel', note: 'n' }, researchedAt: '',
 };
 
+const strongCritique = { specificityScore: 92, evidenceScore: 90, relevanceScore: 95, genericPhrases: [], verdict: 'skarp' };
+const weakCritique = { specificityScore: 40, evidenceScore: 55, relevanceScore: 60, genericPhrases: ['spændende rejse'], verdict: 'generisk' };
+const sharpenedBrief = { ...fakeBrief, openingLine: 'skærpet replik' };
+
 describe('prospectBriefTool schema', () => {
   it('is named submit_prospect_brief and requires the core fields', () => {
     expect(prospectBriefTool.name).toBe('submit_prospect_brief');
@@ -72,7 +76,9 @@ describe('runProspectScan', () => {
       content: [{ type: 'text', text: 'Fund om Acme (https://acme.dk).' }],
       stop_reason: 'end_turn',
     } as any);
-    mockedStructured.mockResolvedValueOnce(fakeBrief as any);
+    mockedStructured
+      .mockResolvedValueOnce(fakeBrief as any)
+      .mockResolvedValueOnce(strongCritique as any);
 
     const phases: string[] = [];
     const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', (e) => phases.push(e.phase));
@@ -91,7 +97,9 @@ describe('runProspectScan', () => {
 
   it('tells synthesis to use knowledge-only when web search failed', async () => {
     mockedCreate.mockRejectedValueOnce(Object.assign(new Error('web_search not supported'), { status: 400 }));
-    mockedStructured.mockResolvedValueOnce(fakeBrief as any);
+    mockedStructured
+      .mockResolvedValueOnce(fakeBrief as any)
+      .mockResolvedValueOnce(strongCritique as any);
 
     await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {});
 
@@ -134,7 +142,9 @@ describe('multi-market', () => {
     mockedCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
     } as any);
-    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockResolvedValueOnce(strongCritique as any);
     await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DE', () => {});
     const userText = (mockedStructured.mock.calls[0][0].userContent[0] as any).text as string;
     expect(userText).toContain('tysk');
@@ -145,7 +155,9 @@ describe('multi-market', () => {
     mockedCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
     } as any);
-    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockResolvedValueOnce(strongCritique as any);
     await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {});
     const userText = (mockedStructured.mock.calls[0][0].userContent[0] as any).text as string;
     expect(userText).toContain('HELE briefingen på dansk');
@@ -155,7 +167,9 @@ describe('multi-market', () => {
     mockedCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
     } as any);
-    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockResolvedValueOnce(strongCritique as any);
     const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'NO', () => {});
     expect(brief.market).toBe('NO');
   });
@@ -184,7 +198,9 @@ describe('quality fields', () => {
     mockedCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
     } as any);
-    mockedStructured.mockResolvedValueOnce({ ...fakeBrief } as any);
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockResolvedValueOnce(strongCritique as any);
     await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'SE', () => {});
     const userText = (mockedStructured.mock.calls[0][0].userContent[0] as any).text as string;
     expect(userText).toContain('callAngles');
@@ -192,5 +208,56 @@ describe('quality fields', () => {
     expect(userText).toContain('svensk');
     const system = JSON.stringify(mockedStructured.mock.calls[0][0].system);
     expect(system).toContain('whyNow');
+  });
+});
+
+describe('pres-test (critique → sharpen)', () => {
+  beforeEach(() => { mockedCreate.mockReset(); mockedStructured.mockReset(); });
+
+  const mockGather = () => mockedCreate.mockResolvedValueOnce({
+    content: [{ type: 'text', text: 'memo' }], stop_reason: 'end_turn',
+  } as any);
+
+  it('skips sharpening when the critique scores high', async () => {
+    mockGather();
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)      // syntese
+      .mockResolvedValueOnce(strongCritique as any);        // kritik
+    const phases: string[] = [];
+    const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', (e) => phases.push(e.phase));
+    expect(phases).toContain('critiquing');
+    expect(phases).not.toContain('sharpening');
+    expect(mockedStructured).toHaveBeenCalledTimes(2);
+    expect(brief.openingLine).toBe(fakeBrief.openingLine);
+    const critiqueOpts = mockedStructured.mock.calls[1][0];
+    expect(critiqueOpts.model).toBe(config.fastModel);
+    expect(critiqueOpts.tool.name).toBe('submit_prospect_critique');
+  });
+
+  it('sharpens once when the critique scores low, with Opus and fact-preservation', async () => {
+    mockGather();
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockResolvedValueOnce(weakCritique as any)
+      .mockResolvedValueOnce({ ...sharpenedBrief } as any);
+    const phases: string[] = [];
+    const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', (e) => phases.push(e.phase));
+    expect(phases).toContain('sharpening');
+    expect(brief.openingLine).toBe('skærpet replik');
+    expect(brief.market).toBe('DK');
+    const sharpenOpts = mockedStructured.mock.calls[2][0];
+    expect(sharpenOpts.model).toBe(config.creativeModel);
+    expect(sharpenOpts.tool.name).toBe('submit_prospect_brief');
+    const sharpenText = (sharpenOpts.userContent[0] as any).text as string;
+    expect(sharpenText).toContain('spændende rejse');
+  });
+
+  it('returns the original brief when the pres-test itself fails', async () => {
+    mockGather();
+    mockedStructured
+      .mockResolvedValueOnce({ ...fakeBrief } as any)
+      .mockRejectedValueOnce(new Error('boom'));
+    const brief = await runProspectScan('Acme', EXEMPLAR_DEFAULT_SELLER, 'DK', () => {});
+    expect(brief.openingLine).toBe(fakeBrief.openingLine);
   });
 });

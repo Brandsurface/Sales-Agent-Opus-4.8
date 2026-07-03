@@ -105,6 +105,30 @@ export function marketLanguage(market: ProspectMarket): string {
   return MARKET_LANGUAGE[market] ?? 'dansk';
 }
 
+export interface ProspectCritique {
+  specificityScore: number;
+  evidenceScore: number;
+  relevanceScore: number;
+  genericPhrases: string[];
+  verdict: string;
+}
+
+export const prospectCritiqueTool: Anthropic.Tool = {
+  name: 'submit_prospect_critique',
+  description: 'Aflever pres-testen af opkalds-briefingen som strukturerede scorer.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      specificityScore: { type: 'number', description: '0-100: hvor konkret og ikke-generisk er grund-til-at-ringe, åbningsreplik og vinkler?' },
+      evidenceScore: { type: 'number', description: '0-100: hvor godt er påstandene forankret i researchens fund og kilder?' },
+      relevanceScore: { type: 'number', description: '0-100: hvor relevant er det hele for NETOP sælgerens tilbud og triggers?' },
+      genericPhrases: { type: 'array', items: { type: 'string' }, description: 'Floskler/generiske formuleringer fundet i briefingen.' },
+      verdict: { type: 'string', description: 'Kort dom: hvad er svagest, og hvad ville en travl beslutningstager afvise?' },
+    },
+    required: ['specificityScore', 'evidenceScore', 'relevanceScore', 'genericPhrases', 'verdict'],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Sælger-profil (Exemplar som standard)
 // ---------------------------------------------------------------------------
@@ -395,7 +419,9 @@ Afslut ved at kalde submit_prospect_brief med den fulde, strukturerede briefing.
 
 export type ProspectProgress =
   | { phase: 'gathering'; step: string }
-  | { phase: 'synthesizing' };
+  | { phase: 'synthesizing' }
+  | { phase: 'critiquing' }
+  | { phase: 'sharpening' };
 
 export async function synthesizeBrief(
   company: string,
@@ -441,6 +467,77 @@ Syntetisér nu den fulde opkalds-briefing. ${languageInstruction} Aflever via su
   return brief;
 }
 
+// ---------------------------------------------------------------------------
+// Pres-test (Haiku) + skærpning (Opus)
+// ---------------------------------------------------------------------------
+
+const CRITIQUE_SYSTEM = `Du er en kynisk salgsdirektør der pres-tester en opkalds-briefing før den når sælgeren.
+Du ved at generiske vinkler ("jeg så I har travlt", "spændende virksomhed") dræber kolde opkald.
+Døm HÅRDT: ville en travl beslutningstager blive hængende efter første sætning?
+Scor konkrethed, bevis-forankring og relevans for sælgerens tilbud 0-100. List alle floskler. Aflever via submit_prospect_critique.`;
+
+const SHARPEN_SYSTEM = `Du er senior B2B-salgsstrateg. Du modtager en opkalds-briefing plus en hård pres-test-kritik.
+Skriv briefingen om så kritikken er adresseret: erstat hver floskel med noget konkret fra researchen, skærp vinklerne og gør whyNow tidsspecifik.
+Du må IKKE ændre fakta: company, signals, sources, decisionMakers og confidence skal bevares som de er. Opfind intet nyt.
+Sprogreglerne er uændrede (analyse på dansk; talte felter på kundens sprog). Aflever HELE den skærpede briefing via submit_prospect_brief.`;
+
+const CRITIQUE_THRESHOLD = 75;
+
+export async function critiqueBrief(
+  brief: ProspectBrief,
+  sellerProfile: SellerProfile,
+  signal?: AbortSignal,
+): Promise<ProspectCritique> {
+  const user = `${sellerProfileText(sellerProfile)}
+
+BRIEFING DER SKAL PRES-TESTES:
+${JSON.stringify(brief, null, 2)}
+
+Pres-test briefingen og aflever via submit_prospect_critique.`;
+  return generateStructured<ProspectCritique>({
+    system: cacheableSystem([CRITIQUE_SYSTEM]),
+    userContent: [{ type: 'text', text: user }],
+    tool: prospectCritiqueTool,
+    model: config.fastModel,
+    maxTokens: 1500,
+    signal,
+  });
+}
+
+export async function sharpenBrief(
+  brief: ProspectBrief,
+  critique: ProspectCritique,
+  sellerProfile: SellerProfile,
+  market: ProspectMarket,
+  signal?: AbortSignal,
+): Promise<ProspectBrief> {
+  const user = `${sellerProfileText(sellerProfile)}
+
+MARKED: ${MARKET_LABEL[market]} (talte felter på ${marketLanguage(market)})
+
+NUVÆRENDE BRIEFING:
+${JSON.stringify(brief, null, 2)}
+
+PRES-TEST-KRITIK (skal adresseres):
+- Konkrethed: ${critique.specificityScore}/100, Bevis: ${critique.evidenceScore}/100, Relevans: ${critique.relevanceScore}/100
+- Floskler der SKAL erstattes: ${critique.genericPhrases.join(' · ') || 'ingen'}
+- Dom: ${critique.verdict}
+
+Skriv den skærpede briefing og aflever via submit_prospect_brief.`;
+  const sharpened = await generateStructured<ProspectBrief>({
+    system: cacheableSystem([SHARPEN_SYSTEM]),
+    userContent: [{ type: 'text', text: user }],
+    tool: prospectBriefTool,
+    model: config.creativeModel,
+    maxTokens: 6000,
+    signal,
+  });
+  sharpened.researchedAt = sharpened.researchedAt || brief.researchedAt;
+  if (!sharpened.sources || sharpened.sources.length === 0) sharpened.sources = brief.sources;
+  sharpened.market = market;
+  return sharpened;
+}
+
 export async function runProspectScan(
   company: string,
   sellerProfile: SellerProfile,
@@ -457,5 +554,20 @@ export async function runProspectScan(
     signal,
   );
   onProgress({ phase: 'synthesizing' });
-  return synthesizeBrief(company, gather, sellerProfile, market, signal);
+  const brief = await synthesizeBrief(company, gather, sellerProfile, market, signal);
+  try {
+    onProgress({ phase: 'critiquing' });
+    const critique = await critiqueBrief(brief, sellerProfile, signal);
+    const passed =
+      critique.specificityScore >= CRITIQUE_THRESHOLD &&
+      critique.evidenceScore >= CRITIQUE_THRESHOLD &&
+      critique.relevanceScore >= CRITIQUE_THRESHOLD;
+    if (passed) return brief;
+    onProgress({ phase: 'sharpening' });
+    return await sharpenBrief(brief, critique, sellerProfile, market, signal);
+  } catch (err) {
+    // Pres-testen er en forbedring, ikke en port: fejler den, leveres den gode briefing.
+    console.warn('[prospect-scan] Pres-test fejlede — leverer uskærpet briefing:', (err as Error)?.message);
+    return brief;
+  }
 }
