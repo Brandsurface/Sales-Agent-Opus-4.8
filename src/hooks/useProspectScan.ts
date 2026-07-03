@@ -8,6 +8,7 @@ import { ProspectBrief, ProspectMarket, SellerProfile } from '../types';
 import { httpErrorMessage } from './httpError';
 import { loadSellerProfile, saveSellerProfile, EXEMPLAR_DEFAULT_SELLER } from '../lib/sellerProfile';
 import { detectMarketFromInput } from '../lib/market';
+import { ProspectPhase } from '../lib/prospectSteps';
 
 const PROGRESS_LABELS: Record<string, string> = {
   gathering: 'Graver efter fund …',
@@ -28,6 +29,7 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
   const [brief, setBrief] = useState<ProspectBrief | null>(null);
   const [isResearching, setIsResearching] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  const [phase, setPhase] = useState<ProspectPhase | null>(null);
   const [synthesisModel, setSynthesisModel] = useState<string | undefined>(undefined);
   const [maxTokens, setMaxTokens] = useState<number | undefined>(undefined);
 
@@ -50,6 +52,7 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
     }
     setIsResearching(true);
     setErrorMsg(null);
+    setPhase('gathering');
     setProgress(PROGRESS_LABELS.gathering);
     try {
       const response = await fetch('/api/prospect-scan', {
@@ -83,7 +86,14 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
           if (payload === '[DONE]') break outer;
           let parsed: any;
           try { parsed = JSON.parse(payload); } catch { continue; }
-          if (parsed.phase) setProgress(PROGRESS_LABELS[parsed.phase] ?? parsed.phase);
+          if (parsed.phase) {
+            setPhase(parsed.phase);
+            setProgress(
+              parsed.phase === 'gathering' && parsed.step
+                ? parsed.step
+                : (PROGRESS_LABELS[parsed.phase] ?? parsed.phase),
+            );
+          }
           if (parsed.error) streamErr = parsed.error;
           if (parsed.done && parsed.brief) finalBrief = parsed.brief as ProspectBrief;
         }
@@ -98,6 +108,7 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
     } finally {
       setIsResearching(false);
       setProgress(null);
+      setPhase(null);
     }
   };
 
@@ -108,7 +119,7 @@ export function useProspectScan(setErrorMsg: (m: string | null) => void) {
     market, setMarket,
     sellerProfile, setSellerProfile, resetSellerProfile,
     synthesisModel, setSynthesisModel, maxTokens, setMaxTokens,
-    brief, isResearching, progress,
+    brief, isResearching, progress, phase,
     handleResearch, handleClearBrief,
   };
 }
