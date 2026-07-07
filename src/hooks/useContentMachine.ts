@@ -1254,6 +1254,7 @@ export function useContentMachine() {
     prospectBrief: prospect.brief,
     isResearchingProspect: prospect.isResearching,
     prospectProgress: prospect.progress,
+    prospectPhase: prospect.phase,
     handleProspectResearch: prospect.handleResearch,
     handleClearProspectBrief: prospect.handleClearBrief,
   };

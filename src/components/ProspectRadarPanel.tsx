@@ -4,10 +4,11 @@
  */
 
 import { useState } from 'react';
-import { Radar, Search, Copy, Download, X } from 'lucide-react';
+import { Radar, Search, Copy, Download, X, Loader2, Check } from 'lucide-react';
 import { ProspectBrief, SellerProfile, ProspectMarket } from '../types';
 import { MARKETS } from '../lib/market';
 import { prospectBriefToMarkdown, downloadProspectMarkdown } from '../lib/prospectExport';
+import { PROSPECT_STEPS, stepStatus, ProspectPhase } from '../lib/prospectSteps';
 
 const MODEL_OPTIONS: { value: string; label: string }[] = [
   { value: 'claude-opus-4-8', label: 'Opus 4.8 — bedst kvalitet' },
@@ -30,6 +31,7 @@ interface ProspectRadarPanelProps {
   brief: ProspectBrief | null;
   isResearching: boolean;
   progress: string | null;
+  phase: ProspectPhase | null;
   onResearch: () => void;
   onClearBrief: () => void;
 }
@@ -38,7 +40,7 @@ export function ProspectRadarPanel({
   company, setCompany, market, setMarket,
   sellerProfile, setSellerProfile, resetSellerProfile,
   synthesisModel, setSynthesisModel, maxTokens, setMaxTokens,
-  brief, isResearching, progress, onResearch, onClearBrief,
+  brief, isResearching, progress, phase, onResearch, onClearBrief,
 }: ProspectRadarPanelProps) {
   const [showProfile, setShowProfile] = useState(false);
   const [showEngine, setShowEngine] = useState(false);
@@ -95,7 +97,37 @@ export function ProspectRadarPanel({
         ))}
       </div>
 
-      {progress && <p className="text-xs text-orange-300 font-mono animate-pulse">{progress}</p>}
+      {isResearching && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            {PROSPECT_STEPS.map((step) => {
+              const status = stepStatus(step.key, phase);
+              return (
+                <span
+                  key={step.key}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors ${
+                    status === 'active'
+                      ? 'border-orange-500 bg-orange-500/15 text-orange-200'
+                      : status === 'done'
+                      ? 'border-orange-500/40 bg-orange-500/5 text-orange-300'
+                      : 'border-slate-700 text-slate-500'
+                  }`}
+                >
+                  {status === 'active' ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : status === 'done' ? (
+                    <Check className="w-3 h-3" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full border border-slate-600" />
+                  )}
+                  {step.label}
+                </span>
+              );
+            })}
+          </div>
+          {progress && <p className="text-xs text-orange-300 font-mono animate-pulse">{progress}</p>}
+        </div>
+      )}
 
       {/* Sælger-profil (foldbar) */}
       <div className="text-xs">
