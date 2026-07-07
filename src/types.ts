@@ -394,3 +394,93 @@ export interface PitchResult {
 
 
 export type CodeDepartmentTarget = 'app' | 'website' | 'landing' | 'game' | 'experience';
+
+// ---------------------------------------------------------------------------
+// Prospect Radar (salgs-research)
+// ---------------------------------------------------------------------------
+
+export interface SellerProfile {
+  company: string;
+  offering: string;
+  packagingTypes: string[];
+  valueMoments: string[];
+  triggers: string[];
+  idealCustomerHints: string;
+}
+
+export interface ProspectSignal {
+  signal: string;
+  timeframe: string;
+  sourceUrl: string;
+  whyItMatters: string;
+}
+
+export interface ProspectGap {
+  gap: string;
+  evidence: string;
+  sellerAngle: string;
+  valueForThem: string;
+}
+
+export interface DecisionMaker {
+  role: string;
+  name?: string;
+  rationale: string;
+}
+
+export interface ProspectCompetitor {
+  name: string;
+  packagingNote: string;
+}
+
+export interface CallAngle {
+  angle: string;
+  openingLine: string;
+  rationale: string;
+}
+
+export interface ProspectObjection {
+  objection: string;
+  response: string;
+}
+
+export interface ProspectConfidence {
+  level: 'høj' | 'middel' | 'lav';
+  note: string;
+}
+
+export interface ProspectCompany {
+  name: string;
+  website: string;
+  category: string;
+  whatTheyDo: string;
+  sizeSignal: string;
+  keyProducts: string[];
+  packagingContext: string;
+}
+
+export type ProspectMarket = 'DK' | 'SE' | 'DE' | 'NO';
+
+export interface ProspectBrief {
+  company: ProspectCompany;
+  signals: ProspectSignal[];
+  gaps: ProspectGap[];
+  reasonToCall: string;
+  openingLine: string;
+  whyNow: string;
+  callAngles: CallAngle[];
+  objections: ProspectObjection[];
+  talkingPoints: string[];
+  smartQuestions: string[];
+  decisionMakers: DecisionMaker[];
+  competitors: ProspectCompetitor[];
+  sources: string[];
+  confidence: ProspectConfidence;
+  researchedAt: string;
+  market: ProspectMarket;
+}
+
+export interface ProspectEngineOptions {
+  synthesisModel?: string;
+  maxTokens?: number;
+}

@@ -23,7 +23,7 @@ export function AppHeader({ theme, setTheme }: AppHeaderProps) {
               Neura Studio
             </span>
             <div className="flex items-center text-[11px] text-slate-500 font-mono mt-0.5">
-              <span>v1.25.1</span>
+              <span>v1.27.1</span>
             </div>
           </div>
         </div>
